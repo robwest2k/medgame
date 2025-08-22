@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MedSim — Textbasierte Notaufnahme</title>
+  <style>
+    :root{
+      --bg:#0b0f14;--panel:#121821;--ink:#e6eef7;--muted:#a9b4c2;--acc:#5ec1ff;--bad:#ff5e7a;--good:#7dffb3;--warn:#ffd166;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    header{padding:16px 20px;border-bottom:1px solid #1e2632;background:linear-gradient(180deg,#121821,#0d141c);display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
+    h1{margin:0;font-size:20px;letter-spacing:.3px}
+    .sub{color:var(--muted);font-size:13px;margin-top:6px}
+    .wrap{display:grid;grid-template-columns:300px 1fr;gap:14px;padding:14px}
+    .col{background:var(--panel);border:1px solid #1e2632;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;min-height:160px}
+    .col h2{font-size:14px;margin:0;padding:10px 12px;border-bottom:1px solid #1e2632;color:#cfe8ff;letter-spacing:.2px}
+    .pad{padding:10px 12px}
+    .btn{display:block;width:100%;text-align:left;padding:10px 12px;border:1px solid #1e2632;background:#0f1520;color:var(--ink);border-radius:10px;margin:6px 0;cursor:pointer}
+    .btn:hover{border-color:#2a3a52}
+    .btn[disabled]{opacity:.5;cursor:not-allowed}
+    .btn.inline{display:inline-block;width:auto}
+    .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+    .log{flex:1;overflow:auto;padding:10px 12px;white-space:pre-wrap}
+    .bubble{padding:8px 10px;border-radius:10px;margin:8px 0;border:1px solid #203042;background:#0d141d}
+    .bubble.good{border-color:#1f5d45;background:#0f1a15}
+    .bubble.bad{border-color:#5d1f2b;background:#1a0f12}
+    .bubble.note{border-color:#2a3a52}
+    .statusbar{display:flex;gap:10px;flex-wrap:wrap}
+    .chip{padding:6px 10px;border:1px solid #2a3a52;border-radius:999px;font-size:12px;background:#0f1520;color:#cfe8ff}
+    .chip.good{border-color:#1f5d45;color:#abfbd1}
+    .chip.bad{border-color:#5d1f2b;color:#ffbac6}
+    .chip.warn{border-color:#6a540f;color:#ffe7a3}
+    .kbd{padding:0 6px;border:1px solid #2a3a52;border-radius:6px;background:#0f1520;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+    .muted{color:var(--muted)}
+    .sticky{position:sticky;top:0;background:var(--panel);z-index:3}
+    .footer{padding:10px 12px;border-top:1px solid #1e2632;color:#93a7bd}
+    details{margin:6px 0}
+    summary{cursor:pointer;color:#cfe8ff}
+    .small{font-size:12px}
+    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+    .flex{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .right{text-align:right}
+    .danger{color:var(--bad)}
+    .success{color:var(--good)}
+    .accent{color:var(--acc)}
+    .toolbar{display:flex;gap:8px;align-items:center}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>MedSim — Textbasierte Notaufnahme</h1>
+      <div class="sub">Löse realistische Notfälle: stelle eine <b>Arbeitsdiagnose</b> & starte die <b>richtige Therapie</b>. Reine Simulation — keine echte Medizin.</div>
+    </div>
+    <div class="toolbar">
+      <button class="btn inline" id="btnDb">📁 Datenbank / Editor</button>
+      <button class="btn inline" id="btnExport">⬇️ Export JSON</button>
+      <button class="btn inline" id="btnImport">⬆️ Import JSON</button>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <section class="col" style="max-height:calc(100vh - 120px)">
+      <h2 class="sticky">Aktionen <span class="muted">(Kosten: Minuten)</span></h2>
+      <div class="pad">
+        <div class="grid">
+          <button class="btn" id="btnVitals">Vitalwerte messen (1)</button>
+          <button class="btn" id="btnInspect">Inspektion/Haut prüfen (1)</button>
+          <button class="btn" id="btnAnamnese">Gezielte Anamnese (2)</button>
+          <button class="btn" id="btnAuskultation">Auskultation Herz/Lunge (2)</button>
+          <button class="btn" id="btnAbdomen">Abdomen untersuchen (2)</button>
+          <button class="btn" id="btnNeurologie">Neurologischer Status (2)</button>
+          <button class="btn" id="btnTests">Diagnostik anfordern</button>
+          <button class="btn" id="btnTherapie">Therapie wählen</button>
+          <button class="btn" id="btnDiagnose">Diagnose stellen</button>
+          <button class="btn" id="btnNCase">Nächster Fall</button>
+        </div>
+        <hr style="border-color:#1e2632;margin:10px 0"/>
+        <div class="statusbar" id="status"></div>
+      </div>
+      <div class="footer small">
+        Shortcuts: <span class="kbd">V</span> Vitalwerte, <span class="kbd">I</span> Inspektion, <span class="kbd">A</span> Anamnese, <span class="kbd">H</span> Herz/Lunge, <span class="kbd">B</span> Abdomen, <span class="kbd">N</span> Neuro, <span class="kbd">D</span> Diagnostik, <span class="kbd">T</span> Therapie, <span class="kbd">G</span> Diagnose.
+      </div>
+    </section>
+
+    <section class="col" style="max-height:calc(100vh - 120px)">
+      <h2 class="sticky">Fall & Verlauf</h2>
+      <div class="pad log" id="log"></div>
+      <div class="footer small">
+        <b>Haftungsausschluss:</b> Dieses Spiel dient der Simulation und Ausbildung. Es ersetzt <u>niemals</u> medizinische Beratung, Diagnose oder Therapie im echten Leben.
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // ---------- Simple modal utility (reused by game & editor) ----------
+    function modal(title, contentNode){
+      const overlay = document.createElement('div');
+      overlay.style.position='fixed'; overlay.style.inset='0'; overlay.style.background='rgba(0,0,0,.5)'; overlay.style.display='grid'; overlay.style.placeItems='center'; overlay.style.zIndex='40';
+      const card = document.createElement('div');
+      card.style.width='min(980px, 96vw)'; card.style.maxHeight='88vh'; card.style.overflow='auto'; card.style.background='#0f1520'; card.style.border='1px solid #1e2632'; card.style.borderRadius='12px'; card.style.boxShadow='0 10px 30px rgba(0,0,0,.5)';
+      card.innerHTML = `<div style="position:sticky;top:0;background:#121821;border-bottom:1px solid #1e2632;padding:10px 12px;display:flex;justify-content:space-between;align-items:center"><b>${title}</b><button class='btn inline' id='__close'>Schließen</button></div>`;
+      card.appendChild(contentNode);
+      overlay.appendChild(card);
+      overlay.addEventListener('click', (e)=>{ if(e.target===overlay) document.body.removeChild(overlay) });
+      card.querySelector('#__close').onclick=()=>document.body.removeChild(overlay);
+      document.body.appendChild(overlay);
+      return { close:()=>document.body.removeChild(overlay) }
+    }
+
+    // ---------- Utilities ----------
+    const $ = sel => document.querySelector(sel);
+    const logEl = $('#log');
+    const statusEl = $('#status');
+    function rnd(min, max){ return Math.floor(Math.random()*(max-min+1))+min }
+    function choose(arr){ return arr[Math.floor(Math.random()*arr.length)] }
+    function addLog(html, cls='note'){ const d=document.createElement('div'); d.className='bubble '+cls; d.innerHTML=html; logEl.appendChild(d); logEl.scrollTop=logEl.scrollHeight }
+    function clearLog(){ logEl.innerHTML='' }
+    function chip(txt, kind=''){ const span=document.createElement('span'); span.className='chip '+kind; span.textContent=txt; return span }
+
+    // ---------- Persistence & external DB ----------
+    const LS_KEY = 'medsim_cases_v1';
+    function getLocalCases(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)||'[]') }catch(e){ return [] } }
+    function setLocalCases(arr){ localStorage.setItem(LS_KEY, JSON.stringify(arr)); }
+
+    // The engine reads from CURRENT_CASES (builtins + local override if enabled)
+    let USE_BUILTIN = true;
+    function getCurrentCases(){ return (USE_BUILTIN? BUILTIN_CASES.slice(): []).concat(getLocalCases()) }
+
+    // ---------- Core state ----------
+    const State = {
+      case:null,
+      time:0,
+      discovered:{vitals:false, sweat:false, hx:[], exam:[]},
+      testsDone:{},
+      therapies:[],
+      life:{bp:110, hr:80, rr:16, spo2:98, temp:36.8, gcs:15},
+      alive:true,
+      won:false,
+      score:0,
+    }
+
+    const normalRanges = { bp:"120/80 ± (20/15)", hr:"60–100/min", rr:"12–20/min", spo2:">= 94%", temp:"36.1–37.8°C", gcs:">= 14" }
+
+    function resetState(c){
+      State.case = JSON.parse(JSON.stringify(c));
+      State.time = 0; State.discovered = {vitals:false, sweat:false, hx:[], exam:[]}; State.testsDone={}; State.therapies=[]; State.alive=true; State.won=false; State.score=0; State.life = {...c.initialVitals};
+      clearLog();
+      addLog(`<b>Neuer Fall:</b> ${c.title}
+
+<strong>Notiz der Pflege:</strong> ${c.presentation}`, 'note');
+      renderStatus();
+    }
+
+    function renderStatus(){
+      statusEl.innerHTML='';
+      statusEl.append(chip(`Zeit: ${State.time} min`));
+      statusEl.append(chip(`Zustand: ${State.alive? 'stabil' : 'verstorben'}`, State.alive? 'good':'bad'));
+      statusEl.append(chip(`Score: ${State.score}`));
+      if(State.discovered.vitals){
+        statusEl.append(chip(`BP ${State.life.bpSys ?? '?'} / ${State.life.bpDia ?? '?'} mmHg`,'warn'))
+        statusEl.append(chip(`HF ${State.life.hr}/min`,'warn'))
+        statusEl.append(chip(`AF ${State.life.rr}/min`,'warn'))
+        statusEl.append(chip(`SpO₂ ${State.life.spo2}%`,'warn'))
+        statusEl.append(chip(`Temp ${State.life.temp.toFixed(1)}°C`,'warn'))
+      }
+    }
+
+    function spend(mins){
+      State.time += mins;
+      if(State.case.timeToDeath){
+        const tfrac = State.time/State.case.timeToDeath;
+        if(State.alive){
+          if(tfrac > 0.9 && Math.random()<0.25){
+            addLog('⚠️ Die Vitalwerte verschlechtern sich wegen Verzögerung.', 'bad');
+            State.life.bpSys = Math.max(60, (State.life.bpSys||110) - rnd(5,12));
+            State.life.bpDia = Math.max(30, (State.life.bpDia||70) - rnd(3,8));
+            State.life.hr = Math.min(160, (State.life.hr||80) + rnd(4,10));
+            State.life.rr = Math.min(40, (State.life.rr||16) + rnd(2,6));
+            State.life.spo2 = Math.max(80, (State.life.spo2||98) - rnd(1,4));
+          }
+          if(State.time >= State.case.timeToDeath){ kill('Der Patient dekompensiert und verstirbt nach kritischer Verzögerung.'); }
+        }
+      }
+      renderStatus();
+    }
+
+    function kill(msg){ if(!State.alive) return; State.alive=false; addLog('☠️ '+msg,'bad'); endRound(false) }
+
+    function endRound(success){
+      let diagStr = '';
+      if(success){ State.won=true; State.score += 100; addLog('✅ Fall gelöst!','good'); diagStr = `<b>Arbeitsdiagnose:</b> ${State.case.correctDiagnosis}
+<b>Therapie-Kernschritte:</b> ${State.case.requiredTherapies.map(id=>labelOf(id)).join(', ')}`; }
+      else { diagStr = `<b>Erwartete Diagnose:</b> ${State.case.correctDiagnosis}
+<b>Therapie-Kernschritte:</b> ${State.case.requiredTherapies.map(id=>labelOf(id)).join(', ')}`; }
+      const insights = `<details><summary>Begründung & Lernpunkte</summary><div class="small">${State.case.explanation||'—'}</div></details>`
+      addLog(`
+${diagStr}
+
+${insights}`,'note');
+      disableCore(true);
+    }
+
+    function disableCore(disabled){ ['#btnVitals','#btnInspect','#btnAnamnese','#btnAuskultation','#btnAbdomen','#btnNeurologie','#btnTests','#btnTherapie','#btnDiagnose'].forEach(sel=>{ $(sel).disabled = disabled; }); }
+
+    // ---------- Actions ----------
+    $('#btnVitals').onclick = ()=>{ if(!State.alive) return; spend(1); State.discovered.vitals=true; const bpSys=State.life.bpSys ?? 110; const bpDia=State.life.bpDia ?? 70; addLog(`<b>Vitalwerte:</b> BP ${bpSys}/${bpDia} mmHg, HF ${State.life.hr}/min, AF ${State.life.rr}/min, SpO₂ ${State.life.spo2}%, Temp ${State.life.temp.toFixed(1)}°C, GCS ${State.life.gcs}.<br><span class="muted">Normalbereiche: BP ${normalRanges.bp}, HF ${normalRanges.hr}, AF ${normalRanges.rr}, SpO₂ ${normalRanges.spo2}, Temp ${normalRanges.temp}.</span>`); renderStatus(); }
+    $('#btnInspect').onclick = ()=>{ if(!State.alive) return; spend(1); addLog(State.case.findings.inspection,'note'); if(State.case.findings.inspection.toLowerCase().includes('schweiß')) State.discovered.sweat=true; }
+    $('#btnAuskultation').onclick = ()=>{ if(!State.alive) return; spend(2); addLog(State.case.findings.auskultation,'note'); }
+    $('#btnAbdomen').onclick = ()=>{ if(!State.alive) return; spend(2); addLog(State.case.findings.abdomen,'note'); }
+    $('#btnNeurologie').onclick = ()=>{ if(!State.alive) return; spend(2); addLog(State.case.findings.neuro,'note'); }
+    $('#btnAnamnese').onclick = ()=>{ if(!State.alive) return; spend(2); chooseModal('Gezielte Anamnese', State.case.historyQs.map(q=>({id:q.id,label:q.q})), (id)=>{ const a = State.case.historyQs.find(x=>x.id===id); addLog(`<b>Frage:</b> ${a.q}<br><b>Antwort:</b> ${a.a}`); }); }
+    $('#btnTests').onclick = ()=>{ if(!State.alive) return; chooseModal('Diagnostik anfordern', State.case.tests.map(t=>({id:t.id,label:`${t.label} (+${t.time} min)`})), (id)=>{ const t = State.case.tests.find(x=>x.id===id); spend(t.time); State.testsDone[id]=true; addLog(`<b>${t.label}:</b> ${t.result}`); }); }
+
+    function labelOf(id){ const opt = State.case.therapies.find(x=>x.id===id); return opt? opt.label : id; }
+    function applyEffects(effects){ if(!effects) return; effects.forEach(e=>{ if(e.type==='vitals'){ ['bpSys','bpDia','hr','rr','spo2','temp','gcs'].forEach(k=>{ if(typeof e[k] === 'number') State.life[k] = Math.round(State.life[k] + e[k]); }); } if(e.type==='flag' && e.key){ State[e.key]=e.value } }); renderStatus(); }
+
+    $('#btnTherapie').onclick = ()=>{ if(!State.alive) return; const opts = State.case.therapies.map(t=>{ let disabled=false, hint=''; if(t.requiresVitals && !State.discovered.vitals){ disabled=true; hint='(erst Vitalwerte erheben)'} if(t.requiresTest && !State.testsDone[t.requiresTest]){ disabled=true; hint='(vorher passenden Test)'} return {id:t.id,label:t.label + (disabled? ' '+hint:''),disabled} }); chooseModal('Therapie wählen', opts, (id)=>{ const t = State.case.therapies.find(x=>x.id===id); if(t.requiresVitals && !State.discovered.vitals){ addLog('Du solltest zuerst Vitalwerte messen.','bad'); return } if(t.requiresTest && !State.testsDone[t.requiresTest]){ addLog('Diese Maßnahme setzt passende Diagnostik voraus.','bad'); return } spend(t.time||1); State.therapies.push(id); addLog(`<b>Therapie:</b> ${t.label}. ${t.note||''}`); applyEffects(t.effects); if(t.harm){ if(typeof t.harm === 'string') addLog(t.harm,'bad'); if(t.fatal) return kill('Fatale Fehlbehandlung.'); } if(State.case.harmRules){ for(const rule of State.case.harmRules){ if(rule.when && rule.when(id, State)){ if(rule.fatal){ kill(rule.msg); return } addLog(rule.msg, 'bad'); } } } checkWin(); }) }
+
+    function checkWin(){ if(State.case.autowinOnTherapy){ const done = new Set(State.therapies); const need = (State.case.requiredTherapies||[]).every(x=>done.has(x)); if(need){ endRound(true) } } }
+    $('#btnDiagnose').onclick = ()=>{ if(!State.alive) return; chooseModal('Arbeitsdiagnose wählen', State.case.diagnoses.map((d,i)=>({id:i,label:d})), (id)=>{ spend(0); const choice = State.case.diagnoses[id]; if(choice === State.case.correctDiagnosis){ State.score += 40; addLog(`<b>Diagnose getroffen:</b> ${choice} ✔︎`,'good'); const done = new Set(State.therapies); const need = (State.case.requiredTherapies||[]).every(x=>done.has(x)); if(need){ return endRound(true) } addLog('Richtige Diagnose! Schließe jetzt die Kerntherapien ab.', 'note'); } else { State.score -= 15; addLog(`<b>Diagnose verfehlt:</b> ${choice} ✖︎`, 'bad'); if(State.case.misdiagnosisFatal){ kill('Falsche Diagnose führte zu fataler Behandlung.'); } } }) }
+    $('#btnNCase').onclick = ()=> newCase();
+
+    // ---------- Choice modal ----------
+    function chooseModal(title, options, onChoose){
+      const inner = document.createElement('div'); inner.className='pad';
+      options.forEach(o=>{ const b = document.createElement('button'); b.className='btn'; b.textContent=o.label; b.disabled=!!o.disabled; b.onclick=()=>{ holder.close(); onChoose(o.id) }; inner.appendChild(b); })
+      const holder = modal(title, inner);
+    }
+
+    // ---------- BUILTIN CASES (can be disabled) ----------
+    const BUILTIN_CASES = [];
+    // (same eight cases as vorher)
+    BUILTIN_CASES.push({
+      id:'ugi-bleed',
+      title:'Kreidebleich & kollabiert (50 m, NSAID-Nutzer)',
+      presentation:'50-jähriger Mann wird blass und schweißnass in die Notaufnahme gebracht. Kreislauf instabil laut Rettungsdienst. Seit 2 Tagen pechschwarzer Stuhl. Nimmt wegen Rückenschmerzen regelmäßig Ibuprofen.',
+      timeToDeath: 20,
+      initialVitals:{bpSys:82,bpDia:50,hr:124,rr:24,spo2:95,temp:36.1,gcs:15},
+      findings:{ inspection:'Der Patient ist <b>kreidebleich</b>, <b>kaltschweißig</b> und wirkt ängstlich. Periphere kalte Extremitäten.', auskultation:'Herz: tachykard, keine Nebengeräusche. Lunge: vesikulär, keine Rasselgeräusche.', abdomen:'Weich, leicht druckdolent epigastrisch, <i>digital-rektal</i>: Teerstuhl (Meläna).', neuro:'Orientiert, etwas benommen — vermutlich Kreislauf.' },
+      historyQs:[ {id:'beginn',q:'Beginn & Verlauf?',a:'Seit gestern zunehmende Schwäche, heute Morgen Kreislaufkollaps.'}, {id:'meds',q:'Medikamente & Gerinnung?',a:'Tägliches Ibuprofen 600 mg, keine Antikoagulation bekannt.'}, {id:'emesis',q:'Erbrechen? Farbe?',a:'Einmaliges Erbrechen, kaffeesatzartig.'} ],
+      tests:[ {id:'lab',label:'Labor (BB, Gerinnung, Nieren, Kreuzblut)',time:5,result:'Hb 7.6 g/dL (niedrig), Thrombos normal, INR 1.0, Harnstoff erhöht, Laktat 3.9 mmol/L. Kreuzblut läuft.'}, {id:'sono',label:'Point-of-care Sono/FAST',time:3,result:'Unauffällig im Abdomen, kein freies Blut. Magen gefüllt.'}, {id:'ekg',label:'EKG 12-Kanal',time:1,result:'Sinustachykardie, keine ST-Hebungen.'} ],
+      therapies:[ {id:'ivx2',label:'2 großlumige i.v.-Zugänge + Volumenbolus',time:1,effects:[{type:'vitals',bpSys:+10,bpDia:+6,hr:-6}]}, {id:'blood',label:'Transfusion (Erythrozyten) nach Kreuzprobe',time:4,requiresTest:'lab',effects:[{type:'vitals',bpSys:+12,bpDia:+6,hr:-8}]}, {id:'ppi',label:'PPI i.v. (Ulkusprotektion)',time:0,effects:[{type:'vitals',hr:-1}]}, {id:'txa',label:'Tranexamsäure i.v.',time:0,effects:[{type:'vitals',hr:-1}]}, {id:'heparin',label:'Heparin',time:0,harm:'Kontraindiziert bei aktiver Blutung.',fatal:true}, {id:'nsaid',label:'NSAR (Schmerzmittel)',time:0,harm:'Verstärkt Blutungsrisiko und Ulkus.'}, {id:'gi',label:'Endoskopie (Notfall-Gastroskopie) veranlassen',time:2,requiresTest:'lab',effects:[{type:'flag',key:'endoCalled',value:true}]} ],
+      diagnoses:['Akutes Koronarsyndrom (STEMI)','Obere GI-Blutung (Ulkus)','Sepsis','Lungenembolie'], correctDiagnosis:'Obere GI-Blutung (Ulkus)', requiredTherapies:['ivx2','blood','ppi','gi'], autowinOnTherapy:true, explanation:`Blässe, Kaltschweißigkeit, Meläna und NSAR-Anamnese sprechen für eine <b>obere GI-Blutung</b> mit hypovolämischem Schock. Priorität: zwei großlumige Zugänge, Volumen, Kreuzblut/Transfusion, Protonenpumpenhemmer und frühe Endoskopie. <i>Heparin/NSAR kontraindiziert.</i>`, harmRules:[ { when:(choice)=> choice==='heparin', fatal:true, msg:'Gerinnungshemmung bei aktiver Blutung → exsanguinationsnah.' } ]
+    });
+    BUILTIN_CASES.push({ id:'stemi', title:'Brustschmerz, kalter Schweiß (62 m, Raucher)', presentation:'62-jähriger Raucher mit retrosternalem Druck seit 45 Minuten, Ausstrahlung in linken Arm/Kiefer, Übelkeit, kalter Schweiß.', timeToDeath:60, initialVitals:{bpSys:110,bpDia:70,hr:96,rr:20,spo2:95,temp:36.8,gcs:15}, findings:{ inspection:'Kaltschweißig, schmerzgeplagt, blass.', auskultation:'Herz: tachykard, Lunge: basal feinblasige RG beidseits gering.', abdomen:'Weich, unauffällig.', neuro:'Unauffällig.' }, historyQs:[ {id:'risks',q:'Risikofaktoren?',a:'Raucher, Hypertonie, Hyperlipidämie.'}, {id:'nitro',q:'Schmerzantwort auf Nitro?',a:'Keine Besserung.'}, {id:'onset',q:'Beginn & Dauer?',a:'Vor ~45 Minuten plötzlich begonnen.'}], tests:[ {id:'ekg',label:'EKG 12-Kanal',time:1,result:'ST-Hebungen V2–V4, Reciproken in II, III, aVF.'}, {id:'trop',label:'Troponin',time:5,result:'Deutlich positiv.'}, {id:'cxr',label:'Röntgen Thorax',time:5,result:'Leichte Stauungszeichen.'}], therapies:[ {id:'asa',label:'Aspirin (Kautablette)',time:0}, {id:'hep',label:'Heparin i.v.',time:0}, {id:'o2',label:'Sauerstoff (nur bei SpO₂ < 90%)',time:0}, {id:'nitro',label:'Nitroglycerin s.l./i.v. (falls keine Hypotonie)',time:0,harm:'Bei Hypotonie/Inferiorinfarkt Vorsicht.'}, {id:'pci',label:'PCI-Team aktivieren (Primär-PCI)',time:1,requiresTest:'ekg'}, {id:'morph',label:'Opioid-Analgesie',time:0,harm:'Kann Übelkeit/Beatmungspflicht fördern.'}, {id:'lyt',label:'Fibrinolyse',time:0,harm:'Wenn PCI zeitnah verfügbar, keine Primär-Option.'}, {id:'nsaid',label:'NSAR geben',time:0,harm:'Kontraindiziert — erhöht Mortalität bei ACS.'}], diagnoses:['Pleuritis','Obere GI-Blutung','Akutes Koronarsyndrom (STEMI)','Panikattacke'], correctDiagnosis:'Akutes Koronarsyndrom (STEMI)', requiredTherapies:['asa','hep','pci'], autowinOnTherapy:true, explanation:`Typischer ACS-Schmerz mit ST-Hebungen → <b>STEMI</b>. Standard: <b>ASA + Heparin</b>, schnellstmöglich <b>PCI</b>. Sauerstoff nur bei Hypoxie, Nitrat nur ohne Hypotonie/V. Rechtsinfarkt. <i>NSAR vermeiden.</i>` , harmRules:[ { when:(choice,S)=> choice==='nitro' && (S.life.bpSys<95), fatal:true, msg:'Nitrat bei Hypotonie → Kreislaufkollaps.' } ] });
+    BUILTIN_CASES.push({ id:'ana', title:'Atemnot & Ausschlag nach Nusskuchen (28 w)', presentation:'28-jährige Frau mit rasch progredienter Atemnot, Stridor, Urtikaria nach Verzehr von Kuchen (Nüsse).', timeToDeath:15, initialVitals:{bpSys:78,bpDia:45,hr:132,rr:30,spo2:86,temp:36.9,gcs:14}, findings:{ inspection:'Generalisiertes Quaddeln, Lippenödem, <b>kaltschweißig</b>.', auskultation:'Giemen, inspiratorischer Stridor.', abdomen:'Unauffällig.', neuro:'Unruhig, Angst.' }, historyQs:[ {id:'all',q:'Allergien?',a:'Bekannte Nussallergie.'}, {id:'med',q:'Medikamente?',a:'Keine.'}], tests:[ {id:'bz',label:'BZ kapillär',time:0,result:'Normal.'}, {id:'bga',label:'BGA',time:2,result:'Metabolische Azidose leicht, pO₂ erniedrigt.'}], therapies:[ {id:'epi',label:'Adrenalin i.m. anterolateraler Oberschenkel (sofort)',time:0,effects:[{type:'vitals',bpSys:+18,bpDia:+10,hr:-6,rr:-4,spo2:+6}]}, {id:'o2',label:'Sauerstoff hochdosiert',time:0,effects:[{type:'vitals',spo2:+4}]}, {id:'fluids',label:'Schneller i.v. Flüssigkeitsbolus',time:0,effects:[{type:'vitals',bpSys:+12,bpDia:+6,hr:-4}]}, {id:'h1',label:'H1-Antihistaminikum',time:0}, {id:'steroid',label:'Glukokortikoid i.v.',time:0}, {id:'beta',label:'Betablocker i.v.',time:0,harm:'Kontraindiziert: verschlechtert Anaphylaxie.',fatal:true}], diagnoses:['Asthma-Anfall','Anaphylaxie','Panikattacke','Pneumothorax'], correctDiagnosis:'Anaphylaxie', requiredTherapies:['epi','o2','fluids'], autowinOnTherapy:true, explanation:`<b>Anaphylaxie</b> erfordert <b>sofort Adrenalin i.m.</b>, hochdosierten Sauerstoff und Volumen. Antihistaminika/Glukokortikoide sind adjunktiv. Betablocker kontraindiziert. Zeitkritisch.` });
+    BUILTIN_CASES.push({ id:'dka', title:'Polyurie, Erbrechen, tiefe Atmung (19 m, T1D)', presentation:'19-jähriger Typ-1-Diabetiker, seit 2 Tagen krank, jetzt Erbrechen, Bauchschmerzen, Kussmaul-Atmung.', timeToDeath:120, initialVitals:{bpSys:102,bpDia:64,hr:118,rr:28,spo2:98,temp:37.8,gcs:14}, findings:{ inspection:'Dehydriert, trockene Schleimhäute, Acetongeruch, blass-schweißig.', auskultation:'Herz tachykard, Lunge frei.', abdomen:'Leicht diffus druckdolent, keine Abwehrspannung.', neuro:'Benommen, orientiert.' }, historyQs:[ {id:'ins',q:'Insulin-Compliance?',a:'Unregelmäßig injiziert.'}, {id:'ill',q:'Infektzeichen?',a:'Fieber/Husten seit 2 Tagen.'}], tests:[ {id:'bz',label:'BZ kapillär',time:0,result:'480 mg/dL (26.7 mmol/L).'}, {id:'bga',label:'BGA + Elektrolyte',time:3,result:'pH 7.12, HCO₃⁻ 10, K⁺ 3.1, Na⁺ 132, Anionenlücke hoch.'}, {id:'ket',label:'Ketonurie/β-Hydroxybutyrat',time:2,result:'Stark positiv.'}], therapies:[ {id:'fluid',label:'i.v. Kristalloide (Bolus)',time:0,effects:[{type:'vitals',bpSys:+8,bpDia:+4,hr:-4}]}, {id:'k',label:'Kaliumsubstitution (bei K⁺ < 3.3 vor Insulin)',time:0,requiresTest:'bga',effects:[{type:'vitals',hr:-2}]}, {id:'ins',label:'Insulininfusion (nach K⁺-Check)',time:0,requiresTest:'bga',effects:[{type:'vitals',rr:-4,hr:-4}]}, {id:'bica',label:'Natriumbikarbonat',time:0,harm:'Nur bei pH < 6.9 erwägen.'}], diagnoses:['Hyperglykämische Hyperosmolarität','Diabetische Ketoazidose (DKA)','Appendizitis','Pankreatitis'], correctDiagnosis:'Diabetische Ketoazidose (DKA)', requiredTherapies:['fluid','k','ins'], autowinOnTherapy:true, explanation:`BZ hoch, Ketonämie und metabolische Azidose → <b>DKA</b>. Erst Volumen, <b>Kalium prüfen/auffüllen</b>, dann <b>Insulin</b>. Bikarbonat selten.` , harmRules:[ { when:(choice,S)=> choice==='ins' && S.testsDone['bga'], fatal:false, msg:'Insulin bei Hypokaliämie ohne K⁺-Korrektur → Arrhythmie-Risiko!' } ]});
+    BUILTIN_CASES.push({ id:'sepsis', title:'Hohes Fieber, Verwirrtheit, Hypotonie (74 w)', presentation:'74-jährige Heimbewohnerin, akut verwirrt, Fieber und Hypotonie, produktiver Husten.', timeToDeath:90, initialVitals:{bpSys:85,bpDia:55,hr:122,rr:30,spo2:90,temp:39.2,gcs:13}, findings:{ inspection:'Fahl, verschwitzt, atemnötig.', auskultation:'Rasselgeräusche basal rechts > links.', abdomen:'Unauffällig.', neuro:'Somnolent, weckbar.' }, historyQs:[ {id:'risk',q:'Vorerkrankungen/Heim?',a:'Demenz, Hypertonie; Pflegeheim.'}, {id:'urine',q:'Harnwegsinfekt?',a:'Keine Dysurie.'}], tests:[ {id:'lab',label:'Labor (BB, CRP/PCT, Laktat)',time:5,result:'Leuko 17/nl, CRP/PCT hoch, Laktat 4.8.'}, {id:'cxr',label:'Röntgen Thorax',time:6,result:'Rechtsbasal Infiltrat.'}, {id:'cult',label:'Blutkulturen',time:1,result:'Abgenommen (Ergebnis später).'}], therapies:[ {id:'o2',label:'Sauerstoffgabe',time:0,effects:[{type:'vitals',spo2:+4}]}, {id:'fluid',label:'Flüssigkeitsbolus (~30 mL/kg)',time:0,effects:[{type:'vitals',bpSys:+10,bpDia:+6,hr:-6}]}, {id:'abx',label:'Breitbandantibiotikum ≤60 min (nach BK)',time:0,requiresTest:'cult'}, {id:'vaso',label:'Vasopressor bei persistierender Hypotonie',time:0,effects:[{type:'vitals',bpSys:+8,bpDia:+5,hr:+2}]}], diagnoses:['Sepsis (Pneumonie-Quelle)','Dehydratation','Herzinsuffizienz-Entgleisung','PE'], correctDiagnosis:'Sepsis (Pneumonie-Quelle)', requiredTherapies:['o2','fluid','abx'], autowinOnTherapy:true, explanation:`Septischer Schock (Hypotonie, Laktat ↑) bei Pneumonie. <b>O₂</b>, <b>Volumen</b>, <b>Blutkulturen</b> vor <b>Breitband-AB</b> (nicht verzögern). Vasopressor falls nötig.` });
+    BUILTIN_CASES.push({ id:'pe', title:'Pleuritischer Schmerz & Dyspnoe nach Langstreckenflug (35 w)', presentation:'35-jährige, starker atemabhängiger Thoraxschmerz, Dyspnoe, nach 10h-Flug, nimmt Pille.', timeToDeath:60, initialVitals:{bpSys:104,bpDia:68,hr:116,rr:24,spo2:90,temp:37.0,gcs:15}, findings:{ inspection:'Angestrengt atmend, blass, schweißig.', auskultation:'Atemgeräusche vermindert basal, Herz tachykard.', abdomen:'Unauffällig.', neuro:'Unauffällig.' }, historyQs:[ {id:'dvt',q:'Beinschwellung/Schmerz?',a:'Rechts Wade druckschmerzhaft, leicht geschwollen.'}, {id:'risk',q:'Hormone/Immobilisation?',a:'Kombinierte Pille, langer Flug.'}], tests:[ {id:'dimer',label:'D-Dimer',time:3,result:'Deutlich erhöht.'}, {id:'ctpa',label:'CT-Angiografie Lunge',time:10,result:'Segmentaler Thrombus rechts.'}, {id:'ekg',label:'EKG',time:1,result:'Sinustachykardie, S1Q3T3 möglich.'}], therapies:[ {id:'o2',label:'Sauerstoffgabe',time:0,effects:[{type:'vitals',spo2:+4}]}, {id:'anticoag',label:'Antikoagulation (Heparin)',time:0}, {id:'lysis',label:'Thrombolyse (bei Schock)',time:0,harm:'Bei stabiler PE nicht indiziert.'}], diagnoses:['Pleuritis','Pneumothorax','Lungenembolie','Panikattacke'], correctDiagnosis:'Lungenembolie', requiredTherapies:['o2','anticoag'], autowinOnTherapy:true, explanation:`Risikofaktoren (Flug, Pille), pleuritischer Schmerz, Tachykardie, D-Dimer ↑, CTPA + → <b>PE</b>. O₂ + Antikoagulation. Lyse nur bei Schock.` });
+    BUILTIN_CASES.push({ id:'ecto', title:'Synkope & Unterbauchschmerz (29 w)', presentation:'29-jährige mit akuten Unterbauchschmerzen, Schwindel/Synkope. LMP vor 7 Wochen.', timeToDeath:30, initialVitals:{bpSys:80,bpDia:48,hr:128,rr:24,spo2:97,temp:36.8,gcs:14}, findings:{ inspection:'Bleich, kaltschweißig.', auskultation:'Unauffällig.', abdomen:'Unterbauch stark druckdolent, Abwehrspannung. Douglas-Schmerz.', neuro:'Benommen.' }, historyQs:[ {id:'preg',q:'Schwangerschaft möglich?',a:'Ja, Periode überfällig.'}], tests:[ {id:'pregtest',label:'β-hCG',time:1,result:'Positiv.'}, {id:'sono',label:'TV-Sono',time:5,result:'Keine intrauterine SS, freie Flüssigkeit im Douglas.'}, {id:'lab',label:'Labor (Hb, Kreuzblut)',time:5,result:'Hb 8.2 g/dL, Kreuzprobe läuft.'}], therapies:[ {id:'iv',label:'Großlumiger Zugang + Volumen',time:0,effects:[{type:'vitals',bpSys:+12,bpDia:+6,hr:-6}]}, {id:'blood',label:'Transfusion',time:3,requiresTest:'lab',effects:[{type:'vitals',bpSys:+10,bpDia:+5,hr:-6}]}, {id:'or',label:'Sofort Gyn/OP alarmieren',time:0}, {id:'mtx',label:'Methotrexat',time:0,harm:'Bei Instabilität kontraindiziert.',fatal:true}], diagnoses:['Rupturierte ektopische Schwangerschaft','Appendizitis','Ovarialtorsion','Gastroenteritis'], correctDiagnosis:'Rupturierte ektopische Schwangerschaft', requiredTherapies:['iv','or','blood'], autowinOnTherapy:true, explanation:`Trias: Bauchschmerz, Synkope/Schock, ausbleibende Periode. <b>Sofortige OP</b> + Volumen/Blut. MTX nur bei stabiler, unrupturierter Lage.` });
+    BUILTIN_CASES.push({ id:'stroke', title:'Plötzliche Hemiparese & Aphasie (68 m)', presentation:'68-jähriger, plötzlich Sprachstörung/rechtsseitige Lähmung, „last known well“ vor 90 min.', timeToDeath:180, initialVitals:{bpSys:168,bpDia:96,hr:88,rr:16,spo2:98,temp:36.7,gcs:15}, findings:{ inspection:'Facialisparese rechts, Blickdeviation links.', auskultation:'Unauffällig.', abdomen:'Unauffällig.', neuro:'Aphasie, Arm/Bein 2/5.' }, historyQs:[ {id:'anticoag',q:'Antikoagulanzien?',a:'Keine.'}, {id:'onset',q:'Zeitpunkt?',a:'Vor ~90 Minuten.'}], tests:[ {id:'ct',label:'CT Schädel (nativ)',time:10,result:'Keine Blutung, frühe Ischämiezeichen möglich.'}, {id:'glucose',label:'BZ kapillär',time:0,result:'Normal.'}], therapies:[ {id:'ctfirst',label:'Bildgebung vor Therapie sicherstellen',time:0}, {id:'tpa',label:'Systemische Thrombolyse (≤4.5 h, keine Blutung)',time:0,requiresTest:'ct',effects:[{type:'vitals',bpSys:-10,bpDia:-8}]}, {id:'bpctrl',label:'RR-Kontrolle (<185/110 vor Lyse)',time:0}, {id:'neuro',label:'Stroke-Unit/Thrombektomie-Team alarmieren',time:0}, {id:'heparin',label:'Heparin sofort',time:0,harm:'Keine Alternative zur Lyse.'}], diagnoses:['Migräne mit Aura','Hypoglykämie','Hirnblutung','Ischämischer Schlaganfall'], correctDiagnosis:'Ischämischer Schlaganfall', requiredTherapies:['ctfirst','tpa','neuro'], autowinOnTherapy:true, explanation:`<b>Ischämischer Schlaganfall</b> im Zeitfenster. Erst CT nativ (Blutung ausschließen), dann Lyse (ohne Kontraindikationen, RR <185/110) + Stroke-Team. Kein Heparin als Ersatz.` , harmRules:[ { when:(choice,S)=> choice==='tpa' && !S.testsDone['ct'], fatal:true, msg:'Lyse ohne Blutungsausschluss → potentiell fatal.' } ]});
+
+    // ---------- Editor / DB modal ----------
+    const SCHEMA_HELP = `
+Erwartetes Schema für jeden Fall (JSON):
+{
+  "id": "unique-string",
+  "title": "Kurztitel",
+  "presentation": "Einstiegstext",
+  "timeToDeath": 60, // Minuten bis Dekompensation
+  "initialVitals": { "bpSys":110, "bpDia":70, "hr":90, "rr":18, "spo2":96, "temp":36.8, "gcs":15 },
+  "findings": {
+    "inspection": "Text",
+    "auskultation": "Text",
+    "abdomen": "Text",
+    "neuro": "Text"
+  },
+  "historyQs": [ {"id":"key","q":"Frage?","a":"Antwort."} ],
+  "tests": [ {"id":"lab","label":"Labor", "time":5, "result":"Text"} ],
+  "therapies": [
+    {"id":"iv","label":"Zugang + Volumen","time":0, "requiresTest":"lab",
+     "effects":[ {"type":"vitals","bpSys":+10,"bpDia":+5,"hr":-5} ],
+     "harm":"optional Hinweis", "fatal":false}
+  ],
+  "diagnoses": ["Diff1","Diff2"],
+  "correctDiagnosis": "Diff2",
+  "requiredTherapies": ["iv"],
+  "autowinOnTherapy": true,
+  "explanation": "Didaktische Erklärung.",
+  "harmRules": [ {"when": "function(choice, S){ return false }", "fatal": false, "msg":"Warntext"} ]
+}
+Hinweis: harmRules.when wird im Editor als String gespeichert und beim Laden zu einer Funktion kompiliert.`;
+
+    const CHATGPT_PROMPT = `Du bist medizinischer Fall-Generator für ein textbasiertes Notfall-Diagnose-Spiel.
+Erzeuge **einen** realistischen Notfall als JSON-Objekt (keine Kommentare, keine zusätzlichen Felder), das exakt dem folgenden Schema entspricht: ${SCHEMA_HELP}
+Anforderungen: tiefer klinischer Inhalt, klare Kontraindikationen, plausible Vitalwerte und Tests, präzise erforderliche Kerntherapien. Sprache: Deutsch.`;
+
+    function openDbModal(){
+      const holder = document.createElement('div'); holder.className='pad';
+      const toolbar = document.createElement('div'); toolbar.className='flex';
+      const cbBuiltin = document.createElement('input'); cbBuiltin.type='checkbox'; cbBuiltin.checked = USE_BUILTIN; cbBuiltin.id='cbBuiltin';
+      const lbl = document.createElement('label'); lbl.htmlFor='cbBuiltin'; lbl.textContent='Integrierte Fälle mitbenutzen';
+      const btnNew = mk('button','btn inline','Neuen Template-Fall anhängen');
+      const btnSave = mk('button','btn inline','Speichern (lokal)');
+      const btnClear = mk('button','btn inline','Lokale DB leeren');
+      const btnLoadUrl = mk('button','btn inline','Von URL laden');
+      const btnCopyPrompt = mk('button','btn inline','ChatGPT-Prompt kopieren');
+      toolbar.append(cbBuiltin,lbl,btnNew,btnSave,btnClear,btnLoadUrl,btnCopyPrompt);
+
+      const ta = document.createElement('textarea'); ta.className='mono'; ta.style.width='100%'; ta.style.minHeight='46vh'; ta.style.background='#0b111a'; ta.style.color='#e6eef7'; ta.style.border='1px solid #1e2632'; ta.style.borderRadius='8px'; ta.style.padding='10px'; ta.spellcheck=false; ta.value = JSON.stringify(getLocalCases(), null, 2);
+
+      const help = document.createElement('details'); help.open=false; help.innerHTML = `<summary>Schema & Hinweise</summary><pre class='mono small' style='white-space:pre-wrap'>${SCHEMA_HELP}</pre>`;
+
+      holder.append(toolbar, document.createElement('hr'), ta, help);
+
+      const m = modal('Falldatenbank / Editor', holder);
+
+      cbBuiltin.onchange = ()=>{ USE_BUILTIN = cbBuiltin.checked; }
+      btnNew.onclick = ()=>{ const tmpl = templateCase(); const arr = safeParse(ta.value)||[]; arr.push(tmpl); ta.value = JSON.stringify(arr, null, 2); }
+      btnSave.onclick = ()=>{ const arr = safeParse(ta.value); if(!Array.isArray(arr)){ alert('JSON muss ein Array von Fällen sein.'); return } const valid = arr.every(validateCase); if(!valid){ alert('Mindestens ein Fall hat fehlende Pflichtfelder.'); return } setLocalCases(arr); alert('Gespeichert. Nächster Fall nutzt aktualisierte DB.'); }
+      btnClear.onclick = ()=>{ if(confirm('Wirklich alle lokalen Fälle löschen?')){ setLocalCases([]); ta.value='[]'; }}
+      btnLoadUrl.onclick = async ()=>{ const url = prompt('JSON-URL eingeben:'); if(!url) return; try{ const res = await fetch(url); const data = await res.json(); if(!Array.isArray(data)){ alert('Erwartet ein Array von Fällen.'); return } ta.value = JSON.stringify(data, null, 2); }catch(e){ alert('Laden fehlgeschlagen: '+e.message) } }
+      btnCopyPrompt.onclick = async ()=>{ try{ await navigator.clipboard.writeText(CHATGPT_PROMPT); btnCopyPrompt.textContent='Kopiert ✔'; setTimeout(()=>btnCopyPrompt.textContent='ChatGPT-Prompt kopieren',1200);}catch(e){ alert('Kopieren fehlgeschlagen.') } }
+    }
+
+    function mk(tag, cls, txt){ const el=document.createElement(tag); if(cls) el.className=cls; if(txt) el.textContent=txt; return el }
+    function safeParse(s){ try{ return JSON.parse(s) }catch(e){ return null } }
+
+    function templateCase(){
+      return {
+        id:'case-'+Math.random().toString(36).slice(2,8),
+        title:'Neuer Fall (Kurzbeschreibung)',
+        presentation:'Einstiegstext für Pflege-Notiz.',
+        timeToDeath:60,
+        initialVitals:{bpSys:110,bpDia:70,hr:90,rr:18,spo2:96,temp:36.8,gcs:15},
+        findings:{inspection:'Haut/Allgemein...',auskultation:'Herz/Lunge...',abdomen:'Abdomen...',neuro:'Neurologisch...'},
+        historyQs:[{id:'hx1',q:'Relevante Frage?',a:'Plausible Antwort.'}],
+        tests:[{id:'lab',label:'Laborpaket',time:5,result:'Relevantes Ergebnis.'}],
+        therapies:[{id:'iv',label:'i.v.-Zugang + Volumen',time:0,effects:[{type:'vitals',bpSys:10,bpDia:5,hr:-5}]}],
+        diagnoses:['Diff1','Diff2'],
+        correctDiagnosis:'Diff2',
+        requiredTherapies:['iv'],
+        autowinOnTherapy:true,
+        explanation:'Didaktische Begründung.',
+        harmRules:[{when:"function(choice,S){ return false }", fatal:false, msg:'Warntext'}]
+      }
+    }
+
+    function validateCase(c){
+      const req = ['id','title','presentation','initialVitals','findings','historyQs','tests','therapies','diagnoses','correctDiagnosis'];
+      for(const k of req){ if(!(k in c)) return false }
+      if(!Array.isArray(c.historyQs) || !Array.isArray(c.tests) || !Array.isArray(c.therapies) || !Array.isArray(c.diagnoses)) return false;
+      // convert harmRules.when strings to functions at runtime
+      if(Array.isArray(c.harmRules)){
+        c.harmRules = c.harmRules.map(r=>{
+          if(r && typeof r.when === 'string'){
+            try{ /* eslint no-new-func: off */ r.when = new Function('choice','S',`return (${r.when})(choice,S)`); }catch(e){ r.when = ()=>false }
+          }
+          return r;
+        })
+      }
+      return true;
+    }
+
+    // ---------- Game flow ----------
+    function newCase(){
+      const CASES = getCurrentCases();
+      if(!CASES.length){ alert('Keine Fälle verfügbar. Öffne die Datenbank und füge Fälle hinzu.'); return }
+      disableCore(false);
+      const c = choose(CASES);
+      // ensure compiled harmRules
+      validateCase(c);
+      resetState(c);
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', e=>{
+      if(e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA') return;
+      const k = e.key.toLowerCase();
+      if(k==='v') $('#btnVitals').click();
+      if(k==='i') $('#btnInspect').click();
+      if(k==='a') $('#btnAnamnese').click();
+      if(k==='h') $('#btnAuskultation').click();
+      if(k==='b') $('#btnAbdomen').click();
+      if(k==='n') $('#btnNeurologie').click();
+      if(k==='d') $('#btnTests').click();
+      if(k==='t') $('#btnTherapie').click();
+      if(k==='g') $('#btnDiagnose').click();
+    })
+
+    // Header controls
+    document.getElementById('btnDb').onclick = openDbModal;
+    document.getElementById('btnExport').onclick = ()=>{
+      const data = JSON.stringify(getLocalCases(), null, 2);
+      const blob = new Blob([data], {type:'application/json'});
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'medsim_cases.json'; a.click(); URL.revokeObjectURL(a.href);
+    }
+    document.getElementById('btnImport').onclick = ()=>{
+      const inp = document.createElement('input'); inp.type='file'; inp.accept='.json,application/json'; inp.onchange = ()=>{
+        const f = inp.files[0]; if(!f) return; const r = new FileReader(); r.onload = ()=>{ try{ const arr = JSON.parse(r.result); if(!Array.isArray(arr)) throw new Error('Erwarte Array'); if(!arr.every(validateCase)) throw new Error('Ungültige Fälle'); setLocalCases(arr); alert('Import erfolgreich.'); }catch(e){ alert('Import fehlgeschlagen: '+e.message) } }; r.readAsText(f);
+      }; inp.click();
+    }
+
+    // Start
+    newCase();
+  </script>
+</body>
+</html>
